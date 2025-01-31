@@ -51,10 +51,10 @@
   changed_when: "'tainted' in taint_result.stdout"
 
 - name: Calico CRD 파일 복사
-ansible.builtin.copy:
-  src: calico-quay-crd.yaml
-  dest: "/tmp/calico-quay-crd.yaml"
-  mode: '0644'
+  ansible.builtin.copy:
+    src: calico-quay-crd.yaml
+    dest: "/tmp/calico-quay-crd.yaml"
+    mode: '0644'
 
 - name: Calico CRD 적용
   ansible.builtin.command:
