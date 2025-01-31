@@ -21,23 +21,33 @@
   shell: source ~/.bashrc
   args:
     executable: /bin/bash
+- name: Helm 저장소 추가
+  command: helm repo add projectcalico https://docs.tigera.io/calico/charts
+  changed_when: false
 
-- name: Create the kube-flannel namespace
-  ansible.builtin.command:
-    cmd: kubectl create ns kube-flannel
-  register: create_namespace
-  changed_when: "'created' in create_namespace.stdout"
+- name: Helm 저장소 업데이트
+  command: helm repo update
+  changed_when: false
 
-- name: Set pod security enforcement to privileged for kube-flannel namespace
-  ansible.builtin.command:
-    cmd: kubectl label --overwrite ns kube-flannel pod-security.kubernetes.io/enforce=privileged
+- name: "Kubernetes 네임스페이스 {{ calico_namespace }} 생성"
+  kubernetes.core.k8s:
+    name: "{{ calico_namespace }}"
+    api_version: v1
+    kind: Namespace
+    state: present
 
-- name: Add the Flannel Helm repository
-  ansible.builtin.command:
-    cmd: helm repo add flannel https://flannel-io.github.io/flannel/
-  register: add_helm_repo
-  changed_when: "'already exists' not in add_helm_repo.stdout"
+- name: "Helm을 이용하여 Calico 설치 (버전 {{ calico_version }})"
+  command: >
+    helm install calico projectcalico/tigera-operator --version {{ calico_version }} --namespace {{ calico_namespace }}
+  args:
+    creates: "/etc/kubernetes/manifests/calico_installed"
 
-- name: Install Flannel using Helm
-  ansible.builtin.command:
-    cmd: helm install flannel --set podCidr="192.168.0.0/16" --namespace kube-flannel flannel/flannel
+- name: "Control Plane 노드 Taint 제거"
+  command: kubectl taint node node1.example.com node-role.kubernetes.io/control-plane:NoSchedule-
+  ignore_errors: true
+
+- name: Calico CRD 적용
+  kubernetes.core.k8s:
+    state: present
+    namespace: calico-system
+    definition: "{{ lookup('template', 'calico-quay-crd.yaml.j2') }}"
