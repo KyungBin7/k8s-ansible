@@ -22,7 +22,6 @@
   args:
     executable: /bin/bash
 
----
 - name: Helm repo 추가
   ansible.builtin.command:
     cmd: "helm repo add projectcalico https://docs.tigera.io/calico/charts"
