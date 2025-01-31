@@ -21,33 +21,40 @@
   shell: source ~/.bashrc
   args:
     executable: /bin/bash
-- name: Helm 저장소 추가
-  command: helm repo add projectcalico https://docs.tigera.io/calico/charts
+
+---
+- name: Helm repo 추가
+  ansible.builtin.command:
+    cmd: "helm repo add projectcalico https://docs.tigera.io/calico/charts"
   changed_when: false
 
-- name: Helm 저장소 업데이트
-  command: helm repo update
+- name: Helm repo 업데이트
+  ansible.builtin.command:
+    cmd: "helm repo update"
   changed_when: false
 
-- name: "Kubernetes 네임스페이스 {{ calico_namespace }} 생성"
-  kubernetes.core.k8s:
-    name: "{{ calico_namespace }}"
-    api_version: v1
-    kind: Namespace
-    state: present
+- name: Kubernetes 네임스페이스 생성 (tigera-operator)
+  ansible.builtin.command:
+    cmd: "kubectl create namespace tigera-operator"
+  register: ns_result
+  failed_when: ns_result.rc != 0 and 'AlreadyExists' not in ns_result.stderr
+  changed_when: "'created' in ns_result.stdout"
 
-- name: "Helm을 이용하여 Calico 설치 (버전 {{ calico_version }})"
-  command: >
-    helm install calico projectcalico/tigera-operator --version {{ calico_version }} --namespace {{ calico_namespace }}
+- name: Calico 설치
+  ansible.builtin.command:
+    cmd: "helm install calico projectcalico/tigera-operator --version v3.27.5 --namespace tigera-operator"
   args:
-    creates: "/etc/kubernetes/manifests/calico_installed"
+    chdir: /tmp  # 필요한 경우 Helm이 실행될 디렉토리 지정
+  changed_when: false
 
-- name: "Control Plane 노드 Taint 제거"
-  command: kubectl taint node node1.example.com node-role.kubernetes.io/control-plane:NoSchedule-
-  ignore_errors: true
+- name: Control-plane 노드 Taint 설정 해제
+  ansible.builtin.command:
+    cmd: "kubectl taint node node1.example.com node-role.kubernetes.io/control-plane:NoSchedule-"
+  register: taint_result
+  failed_when: taint_result.rc != 0 and 'not found' not in taint_result.stderr
+  changed_when: "'tainted' in taint_result.stdout"
 
 - name: Calico CRD 적용
-  kubernetes.core.k8s:
-    state: present
-    namespace: calico-system
-    definition: "{{ lookup('template', 'calico-quay-crd.yaml.j2') }}"
+  ansible.builtin.command:
+    cmd: "kubectl apply -f /tmp/calico-quay-crd.yaml"
+  changed_when: false
